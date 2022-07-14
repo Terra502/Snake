@@ -1,0 +1,304 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.util.Random;
+import javax.swing.JFrame;
+import java.io.*;
+
+public class Snake_V3 extends JFrame implements KeyListener
+{
+  Boolean[][] _head;
+  Boolean[][] _apfel;
+  Boolean[][] _tail;
+  JLabel[][] _feldLabelArray;
+  int[][]     _teilNummer;
+  GridBagConstraints _gbc;
+  Thread _thread = new Thread();
+  Random rand = new Random();
+  ImageIcon _hintergrund = new ImageIcon (".\\Images\\Hintergrund.png");
+  ImageIcon _apfelImage  = new ImageIcon (".\\Images\\Apfel.png");
+  int _x              = 20;
+  int _y              = 20;
+  int taktrate        = 125;
+  int _richtung       = 0;
+  int _startX         = 10;
+  int _startY         = 10;
+  int _apfelCount     = -1;
+  int _teilCount      = 0;
+  int _apfelTailCount = 0;
+  int _altX;
+  int _altY;
+  int _buffer         = 0;
+  
+  boolean _wechselMoeglich = true;
+  boolean _bufferFrei      = true;
+  Snake_V3(String title)
+  {
+    super(title);
+    setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+    setLayout(new GridBagLayout());
+    _gbc            = new GridBagConstraints();
+    _head           = new Boolean[_x][_y];
+    _apfel          = new Boolean[_x][_y];
+    _tail           = new Boolean[_x][_y];
+    _teilNummer     = new int[_x][_y];
+    _feldLabelArray = new JLabel[_x][_y];
+    addKeyListener(this);
+    for (int x = 0; x < _x; x++) {
+      for (int y = 0; y < _y; y++) {
+        _gbc.gridx = x;
+        _gbc.gridy = y;
+        _head[x][y]       = false;
+        _apfel[x][y]      = false;
+        _tail[x][y]       = false;
+        _teilNummer[x][y] = 1870000000;
+        _feldLabelArray[x][y] = new JLabel();
+        _feldLabelArray[x][y].setPreferredSize(new Dimension(20,20));
+        _feldLabelArray[x][y].setOpaque(true); 
+        add(_feldLabelArray[x][y], _gbc);
+      }
+    }
+    _head[_startX][_startY] = true;
+    setApfel();
+    
+    _thread = new Thread(() -> {
+      while (true)
+      {
+        bewegen();
+        try
+        {
+          Thread.sleep(taktrate);
+        }
+        catch(InterruptedException ignored)
+        {
+        }
+      }
+    });
+    _thread.start(); // thread starten
+  }
+  
+  public void setApfel()
+  {
+    int xAchse = rand.nextInt(_x);
+    int yAchse = rand.nextInt(_y);
+    if (_head[xAchse][yAchse] || _tail[xAchse][yAchse]) {
+      setApfel();
+    } else {
+      _apfel[xAchse][yAchse] = true;
+      _apfelCount++;  
+    } // end of if-else
+  }
+  
+  public void moveTail()
+  {
+    int min = 1870000000;
+    for (int x = 0; x < _x; x++) {
+      for (int y = 0; y < _y; y++) {
+        if (_teilNummer[x][y] < min) {
+          min = _teilNummer[x][y];
+        } // end of if
+      }
+    }
+    for (int x = 0; x < _x; x++) {
+      for (int y = 0; y < _y; y++) {
+        if (_teilNummer[x][y] == min) {
+          _tail[x][y] = false;
+          _teilNummer[x][y] = 1870000000;
+        } // end of if
+      }
+    }
+    _teilCount++;
+    _tail[_startX][_startY]  = true;
+    _teilNummer[_startX][_startY] = _teilCount;
+  }
+  
+  public void addTail()
+  {
+    _teilCount++;
+    _tail[_startX][_startY]  = true;
+    _teilNummer[_startX][_startY] = _teilCount;
+  }
+  
+  public void bewegen()
+  {
+    _altX = _startX;
+    _altY = _startY;
+    if (_apfelTailCount >= 1) {
+      addTail();
+      _apfelTailCount--;
+    } // end of if
+    _head[_startX][_startY] = false;
+    switch (_richtung) {
+      case 1 -> _startX--;
+      case 2 -> _startY--;
+      case 3 -> _startX++;
+      default -> _startY++;
+      } // end of switch
+    if (_startX >= _x || _startX <= -1 || _startY >= _y || _startY <= -1) {
+      count();
+      verloren();
+      _thread.stop();
+    } // end of if
+    _head[_startX][_startY] = true;
+    prüfen();
+    if (_apfel[_startX][_startY]) {
+      _apfel[_startX][_startY] = false;  
+      setApfel();
+      _apfelTailCount++;
+    } else {
+      moveTail();
+    } // end of if-else
+    _wechselMoeglich = true;  
+    male();
+  }
+  
+  public void prüfen()
+  {
+    for (int x = 0; x < _x; x++) {
+      for (int y = 0; y < _y; y++) {
+        if (_head[x][y] && _tail[x][y]) {
+          count();
+          verloren();
+          _thread.stop();
+        } // end of if
+      }
+    }
+  }
+  
+  public void verloren()
+  {
+    dispose();
+    Snake_Niederlage niederlageFrame = new Snake_Niederlage("Du hast Verloren");
+    niederlageFrame.pack();
+    niederlageFrame.setSize(500,400);
+    niederlageFrame.setVisible(true);
+    niederlageFrame.setResizable(false);
+    niederlageFrame.setLocation(500,200);
+  }
+  
+  public void count()
+  {
+    String fileName = "log.txt";
+    PrintWriter print = null;
+    try {
+      print = new PrintWriter( new BufferedWriter( new FileWriter( fileName, true )));
+    } catch(IOException iox) {
+      System.out.println("Problem writing " + fileName);
+    } // end of tryPrintWriter print = null;
+    print.println("");
+    print.println(_apfelCount);
+    print.close();
+  }
+  
+  public void male()
+  {
+    for (int x = 0; x < _x; x++) {
+      for (int y = 0; y < _y; y++) {
+        if (!_tail[x][y]) {
+          _feldLabelArray[x][y].setIcon(_hintergrund); 
+        } // end of if
+        if (!_head[x][y]) {
+          _feldLabelArray[x][y].setIcon(_hintergrund);
+        } // end of if
+        if (_apfel[x][y]) {
+          _feldLabelArray[x][y].setIcon(_apfelImage);
+        } // end of if
+        if (_tail[x][y]) {
+          _feldLabelArray[x][y].setBackground(new Color(0,0,0));
+          _feldLabelArray[x][y].setIcon(null);
+        } // end of if
+        if (_head[x][y]) {
+          _feldLabelArray[x][y].setBackground(new Color(0,0,0));
+          _feldLabelArray[x][y].setIcon(null);
+        } // end of if
+      }
+    }
+  }
+
+  public void keyPressed(KeyEvent e)
+  {
+    int myKey = e.getKeyCode();
+    if (!_wechselMoeglich) {
+      if (_bufferFrei) {
+        if (myKey == KeyEvent.VK_RIGHT) {
+          if (_richtung == 1) {
+          } else {
+            _buffer = 3;  
+          } // end of if-else
+        }
+        if (myKey == KeyEvent.VK_LEFT) {
+          if (_richtung == 3) {
+          } else {
+            _buffer = 1;
+          } // end of if-else
+        }
+        if (myKey == KeyEvent.VK_UP) {
+          if (_richtung == 0) {
+          } else {
+            _buffer = 2;
+          } // end of if-else
+        }
+        if (myKey == KeyEvent.VK_DOWN) {
+          if (_richtung == 2) {
+          } else {
+            _buffer = 0;
+          } // end of if-else
+        }
+        _bufferFrei = false;
+      } // end of if
+    } else {
+      if (!_bufferFrei) {
+        _richtung = _buffer;
+        _wechselMoeglich = false;
+        _bufferFrei = true;
+        _buffer = 0;
+      } else {
+        if (myKey == KeyEvent.VK_RIGHT) {
+          if (_richtung == 1) {
+          } else {
+            _richtung = 3;  
+          } // end of if-else
+        }
+        if (myKey == KeyEvent.VK_LEFT) {
+          if (_richtung == 3) {
+          } else {
+            _richtung = 1;
+          } // end of if-else
+        }
+        if (myKey == KeyEvent.VK_UP) {
+          if (_richtung == 0) {
+          } else {
+            _richtung = 2;
+          } // end of if-else
+        }
+        if (myKey == KeyEvent.VK_DOWN) {
+          if (_richtung == 2) {
+          } else {
+            _richtung = 0;
+          } // end of if-else
+        }
+      } // end of if-else
+      _wechselMoeglich = false;
+    } // end of if-else
+  }
+  
+  @Override
+  public void keyReleased(KeyEvent e) {
+  }
+  
+  public void keyTyped(KeyEvent e)
+  {
+  }
+
+  public static void main(String[] args)
+  {
+    Snake_V3 frame = new Snake_V3("Snake");
+    frame.pack();
+    frame.setResizable(false);
+    frame.setVisible(true);
+    frame.setLocation(500,200);
+  }
+}
